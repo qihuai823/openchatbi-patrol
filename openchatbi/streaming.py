@@ -282,6 +282,14 @@ class AgentStreamProcessor:
             if role.answer_node:
                 message_obj = (_message_list(node_output.get("messages")) or [None])[0]
                 if isinstance(message_obj, AIMessage) and message_obj.tool_calls:
+                    # This round is not terminal: it asked for a tool, so the
+                    # tokens streamed for it are preamble ("I'll query ...").
+                    # They were already accumulated into `final_response` while
+                    # streaming, because a token stream cannot know whether its
+                    # round is the last one. The `updates` event arrives after
+                    # the tokens and does know, so reset here and let the next
+                    # round write the real answer.
+                    self.final_response = ""
                     sub_agents = [
                         t["name"] for t in message_obj.tool_calls if t["name"] in self.roles.sub_agent_tools
                     ]
