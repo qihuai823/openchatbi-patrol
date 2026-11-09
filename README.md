@@ -1,3 +1,58 @@
+> ### 本仓库说明：这是对上游 openchatbi 的二次开发
+>
+> 本仓库基于 [zhongyu09/openchatbi](https://github.com/zhongyu09/openchatbi) 的 `v1.0.0b1`（**MIT License**）二次开发。
+> **OpenChatBI 的产品设计、编排层与 text2sql 流水线归原作者所有**，本仓库不主张其著作权。
+>
+> 除第一个提交 `baseline: upstream openchatbi v1.0.0b1 (unmodified)` 是导入上游源码外，
+> 其余 **8 个提交为本人实现**（下方「我做了什么」即对应这些提交）。
+
+## 我做了什么
+
+上游的对话式 BI 是「你问它答」：没人主动提问时，GMV、转化率这类指标的异动不会被任何环节发现。
+我在不改动原有问答链路的前提下补了一条**主动巡检**链路，并把流式解析层的隐式约定改成显式声明。
+
+### 1. 主动巡检子系统（`openchatbi/patrol/`，10 个模块）
+
+| 模块 | 职责 |
+| --- | --- |
+| `plan.py` | 解析 YAML 巡检计划：指标、SQL、阈值、通知通道 |
+| `runner.py` | 执行编排：取数 → 评分 → 去重 → 持久化 → 通知，支持中断续跑 |
+| `baseline.py` | 稳健基线：中位数 + MAD 评分，样本不足时回退 IQR |
+| `dedup.py` | 三级告警去重：严重度门槛 / 冷却窗口 / 升级覆盖 |
+| `store.py` | SQLite 状态持久化：告警记录、冷却状态、运行账本 |
+| `notify.py` | 多通道通知 |
+| `tool.py` | 将巡检结果以只读工具形式暴露给 Agent |
+| `models.py` / `__init__.py` / `__main__.py` | 数据模型、包入口与 CLI |
+
+**关键设计决策**
+
+- **告警指纹故意不含时间桶**：否则持续性问题每天都会被当成「首次出现」，冷却窗口直接失效。
+- **基线用中位数 + MAD**（而非均值 + 标准差）：指标序列常有离群点，均值和标准差会被单点带偏。
+- **状态落 SQLite 而非内存**：进程中断后能按节点续跑，失败节点单独重试、不污染整条链路。
+- **巡检结果以只读工具暴露给 Agent**，模型可以解释告警但不具备修改阈值的能力。
+
+**可核验结果**（`example_ecommerce` 演示数据集）
+
+- 19 条指标序列检出 17 条偏差，仅 **2 条**达到推送线（1 CRITICAL / 1 MEDIUM），其余按门槛拦截；
+- 连续三次运行推送数为 **2 → 0 → 2**，验证冷却窗口生效；
+- GMV 查询结果与手写 SQL **逐位一致**。
+
+### 2. 流式解析层重构
+
+原实现靠 3 张硬编码的节点名表判断流式事件归属，存在 4 类**无报错的静默失效**
+（新增子图被误标为子 agent、LLM 节点改名导致最终答案变空）。
+改为**声明式角色表**（`openchatbi/node_roles.py`）+ 从 `compiled.get_graph()` 自省，
+并用 `golden test` 锁定旧行为，避免重构改变既有输出。
+
+### 3. 测试
+
+- `tests/patrol/`：5 个测试文件，覆盖基线评分、去重、计划解析、执行编排与工具调用；
+- `tests/test_streaming_node_roles.py`：锁定重构前后行为一致；
+- 相对 baseline，全仓库新增测试 **1,787 行**。
+
+> 巡检模块的自带文档见 [`openchatbi/patrol/README.md`](openchatbi/patrol/README.md)。
+
+---
 # OpenChatBI
 
 OpenChatBI is an open source, chat-based intelligent BI tool powered by large language models, designed to help users 
