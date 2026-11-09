@@ -1,0 +1,102 @@
+extra_tool_use_rule: |
+  - Try your best to give appropriate parameters when calling tools.
+  - Use English when calling schema related tools.
+  - Always state the metric definition you used when the question is ambiguous (GMV vs net GMV, all orders vs valid orders).
+
+table_selection_extra_rule: |
+  - Revenue questions need Orders + Order_Items (line_amount lives on Order_Items, not Orders).
+  - Any category-level question needs Products joined via Order_Items.product_id.
+  - Fulfillment / delivery-time questions need Orders + Shipments (shipment_date minus date_order_placed).
+  - Customer segmentation (repeat purchase, state) needs Orders + Customers.
+  - Never join Shipments directly to Order_Items without going through Shipment_Items.
+
+text2sql_extra_rule: |
+  - This warehouse is SQLite. Use strftime('%Y-%m', date_order_placed) for month buckets and
+    julianday(a) - julianday(b) for date differences. There is no DATE_TRUNC and no FULL OUTER JOIN.
+  - Exclude cancelled orders (order_status = 'Canceled') from every revenue metric unless the
+    user explicitly asks about cancellations.
+  - Use SUM(oi.line_amount) for revenue. Do not try to recompute it as quantity * unit_price;
+    line_amount is the denormalized authoritative value.
+  - Always qualify columns with table aliases in multi-table queries; order_id and product_id
+    appear in several tables.
+
+basic_knowledge_glossary: |
+  # Omni-channel Distribution Business Glossary
+
+  ## Overview
+  This warehouse tracks an omni-channel distribution business that sells consumer goods through
+  retail storefronts, an online store, wholesale accounts and bulk contracts. The complete order
+  lifecycle is modelled: order placement -> item fulfilment -> shipment -> invoice.
+
+  ## Core Metrics (use these definitions verbatim)
+
+  **GMV (Gross Merchandise Value)**
+  `SUM(Order_Items.line_amount)` over orders where `order_status != 'Canceled'`.
+  This is the primary revenue metric. When a user just says "revenue" or "sales", they mean GMV.
+
+  **Net GMV**
+  GMV minus the line_amount of orders whose `order_status = 'Returned'`.
+  Use net GMV whenever the user asks about "actual", "realised" or "net" sales.
+
+  **AOV (Average Order Value)**
+  GMV / number of valid orders. "Valid" always means `order_status != 'Canceled'`.
+
+  **Unit Price (件单价)**
+  GMV / `SUM(Order_Items.quantity)`. Use this to compare categories of different price bands.
+
+  **Return Rate (退货率)**
+  Orders with `order_status = 'Returned'` divided by ALL orders (cancellations included in the
+  denominator). Report as a percentage.
+
+  **Fulfillment Lead Time (履约时长)**
+  `julianday(Shipments.shipment_date) - julianday(Orders.date_order_placed)`, in days.
+  Only orders that actually shipped have a shipment row.
+
+  **Gross Margin (毛利率)**
+  `SUM(line_amount - quantity * Products.unit_cost) / SUM(line_amount)`.
+  `unit_cost` is the cost of goods sold per unit.
+
+  **Repeat Purchase Rate (复购率)**
+  Customers with two or more valid orders divided by all customers who placed at least one
+  valid order.
+
+  ## Order Channels
+  `Orders.order_channel` has exactly 12 values and every order maps to one:
+
+  - Commercial channels: `retail` (storefront), `online` (web store), `wholesale` (wholesale
+    account), `bulk` (bulk contract)
+  - Order-handling channels: `standard`, `express`, `priority`
+  - Contextual channels: `gift`, `seasonal`, `promotion`, `repeat`, `verified`
+
+  The first four are the commercially meaningful segments. The rest describe how an order was
+  handled or why it was placed; do not treat them as separate sales channels when the user asks
+  about "channel performance".
+
+  ## Order and Item Status Values
+
+  `Orders.order_status`: Pending | Processed | Shipped | Delivered | Returned | Canceled
+  `Order_Items.order_item_status`: Pending | Packed | Shipped | Finish | Canceled
+
+  ## Product Categories
+  `Products.category` is already normalized to 15 values: phone, electronics, kitchen, outdoor,
+  sports, clothes, beauty, health, office, pet, toy, garden, book, music, food.
+  The raw `Products.product_name` mixes bare names and `category-code` forms (e.g. `music-2810`);
+  always aggregate on `category`, never on `product_name`.
+
+  ## DATA COMPLETENESS WARNING - read before answering any time-series question
+
+  **2025-11 contains only one day of data (2025-11-30, 46 orders).** The dataset starts on
+  2025-11-30 and the next complete month is 2025-12. If a user asks why November is so low, or
+  asks for a month-over-month comparison that includes 2025-11, you MUST state that 2025-11 is a
+  partial month (1 day) rather than a business decline. Never present 2025-11 as a drop in
+  performance.
+
+  The reliable analysis window for month-over-month work is 2025-12 through 2026-05.
+
+  ## Business Rules
+  - One order can contain multiple order items; each item references exactly one product.
+  - One order can be fulfilled by multiple shipments; `Shipment_Items` is the junction table.
+  - One shipment links to one invoice.
+  - Order items within one order can hold different statuses.
+  - Prices are stored per product and copied onto the order item at order time, so historical
+    revenue is stable even if the product's list price later changes.

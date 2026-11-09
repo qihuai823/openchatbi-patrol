@@ -1,0 +1,54 @@
+'':
+  Customers:
+    description: 'Customer master data: unique id, name, US state and free-text details. One row per customer account.'
+    selection_rule: 'Select when the question needs customer identity, customer geography (state) or customer-level aggregation such as repeat purchase, active customers or per-customer revenue.'
+    sql_rule: 'Use customer_id as the join key to Orders. Use state for geographic grouping (2-letter US state code). customer_details is free text and must not be aggregated.'
+  Orders:
+    description: 'Order header table: one row per order, carrying the customer, the order status, the order channel and the placement timestamp.'
+    selection_rule: 'Select for almost every revenue, volume, channel or trend question - it is the grain that defines an order. Do not compute revenue from this table alone; line amounts live on Order_Items.'
+    sql_rule: 'Exclude order_status = ''Canceled'' from revenue metrics. Group months with strftime(''%Y-%m'', date_order_placed). order_channel has 12 values; the commercially meaningful ones are retail, online, wholesale and bulk.'
+    derived_metric: |
+      #### Order Volume Metrics
+      Valid Order Count: COUNT(DISTINCT order_id) FILTER (order_status != 'Canceled')
+      Cancellation Rate (alias 取消率): COUNT(order_status = 'Canceled') / COUNT(*)
+      Return Rate (alias 退货率): COUNT(order_status = 'Returned') / COUNT(*)
+  Order_Items:
+    description: 'Order line table: one row per product line within an order, with the ordered quantity, the unit price captured at order time, the resulting line amount and the item-level status.'
+    selection_rule: 'Always select when the question involves revenue, units sold, product or category performance, or basket composition. This is the only table holding money and quantity.'
+    sql_rule: 'line_amount is authoritative - never recompute it as quantity * unit_price. Join Products via product_id for category. Join Orders via order_id to apply the Canceled filter.'
+    derived_metric: |
+      #### Revenue Metrics
+      GMV (alias 成交总额, Gross Merchandise Value): SUM(line_amount) over orders with order_status != 'Canceled'
+      Net GMV (alias 净成交额): GMV - SUM(line_amount) where order_status = 'Returned'
+      Units Sold (alias 销量, 件数): SUM(quantity)
+      Unit Price (alias 件单价): SUM(line_amount) / SUM(quantity)
+      Gross Margin (alias 毛利率): SUM(line_amount - quantity * Products.unit_cost) / SUM(line_amount)
+      #### Basket Metrics
+      AOV (alias 客单价, Average Order Value): SUM(line_amount) / COUNT(DISTINCT order_id)
+      Lines Per Order (alias 平均条目数): COUNT(*) / COUNT(DISTINCT order_id)
+  Products:
+    description: 'Product catalog: 1000 SKUs, each with a normalized category, a list price, a cost of goods and the raw product name.'
+    selection_rule: 'Select when the question mentions a product, a product category, price bands or margin. Almost always joined through Order_Items.'
+    sql_rule: 'Aggregate on category, not on product_name - product_name mixes bare names and category-code forms such as music-2810. unit_price is the current list price; historical revenue must come from Order_Items.unit_price.'
+    derived_metric: |
+      #### Product Metrics
+      SKU Count (alias SKU 数): COUNT(DISTINCT product_id)
+      Category Count (alias 类目数): COUNT(DISTINCT category)
+      Price Band: CASE WHEN unit_price < 20 THEN 'entry' WHEN unit_price < 100 THEN 'mid' ELSE 'premium' END
+  Shipments:
+    description: 'Shipment table: one row per physical dispatch, linking an order to an invoice and carrying the tracking number and dispatch timestamp.'
+    selection_rule: 'Select when the question involves delivery speed, fulfillment lead time, tracking, or shipped-versus-ordered comparisons.'
+    sql_rule: 'Use order_id to join Orders and invoice_number to join Invoices. Not every order has a shipment - treat a missing row as "not yet shipped" rather than zero days.'
+    derived_metric: |
+      #### Fulfillment Metrics
+      Fulfillment Lead Time (alias 履约时长): AVG(julianday(shipment_date) - julianday(Orders.date_order_placed))
+      Same-Day Ship Rate (alias 当日发货率): COUNT(lead_time < 1) / COUNT(*)
+      Slow Shipment Rate (alias 超时发货率): COUNT(lead_time > 3) / COUNT(*)
+  Invoices:
+    description: 'Invoice table: billing documents generated per shipment, with the invoice date.'
+    selection_rule: 'Select only when the question is about billing, invoicing or financial documents.'
+    sql_rule: 'Join to Shipments via invoice_number. Invoice volume mirrors shipment volume, so do not use it as a proxy for order volume.'
+  Shipment_Items:
+    description: 'Junction table mapping shipments to the specific order items they contain. No surrogate key.'
+    selection_rule: 'Select only when the question asks which items are inside which shipment.'
+    sql_rule: 'Composite primary key (shipment_id, order_item_id). Always join through it to reach Order_Items; never join Shipments straight to Order_Items.'

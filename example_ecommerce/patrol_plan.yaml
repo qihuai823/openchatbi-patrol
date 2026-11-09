@@ -1,0 +1,80 @@
+version: 1
+database: example_ecommerce/ecommerce.sqlite
+
+defaults:
+  history_points: 35
+  min_samples: 14
+  min_relative_change: 0.08
+  cooldown_hours: 24
+  min_severity: medium
+  escalate: true
+  weekday_aware: true
+
+metrics:
+  - name: gmv
+    label: 成交总额 GMV
+    direction: both
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      WHERE o.order_status != 'Canceled'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: order_count
+    label: 有效订单量
+    direction: drop
+    min_relative_change: 0.12
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: return_rate
+    label: 退货率
+    direction: rise
+    min_relative_change: 0.25
+    min_absolute_change: 0.02
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             AVG(CASE WHEN order_status = 'Returned' THEN 1.0 ELSE 0.0 END) AS value
+      FROM Orders
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: fulfillment_days
+    label: 平均履约时长（天）
+    direction: rise
+    min_relative_change: 0.15
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             AVG(julianday(s.shipment_date) - julianday(o.date_order_placed)) AS value
+      FROM Orders o
+      JOIN Shipments s ON s.order_id = o.order_id
+      WHERE o.order_status != 'Canceled'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_by_category
+    label: 分品类 GMV
+    dimension: category
+    direction: both
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             p.category AS category,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+      GROUP BY 1, 2
+      ORDER BY 1
+
+suppress:
+  - reason: "2025-11 只含 11-30 单日数据（46 单），是数据不完整而非业务下滑"
+    bucket_glob: "2025-11*"
