@@ -1,0 +1,5 @@
+id: c14_text2sql
+description: "knowledge lookup for metric definition DAU"
+input:
+  prompt: "What does the metric DAU mean?"
+cassette: cassettes/c14_text2sql.jsonl

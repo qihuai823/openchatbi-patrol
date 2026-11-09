@@ -1,0 +1,5 @@
+id: c16_aggregation
+description: "count distinct users who signed up in the last 7 days"
+input:
+  prompt: "How many active users signed up last week?"
+cassette: cassettes/c16_aggregation.jsonl

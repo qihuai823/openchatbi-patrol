@@ -1,0 +1,52 @@
+organization: MyCompany
+dialect: sqlite
+bi_config_file: example/bi.yaml
+
+# SQL Execution Result Limit Configuration
+enable_sql_result_limit: true
+sql_result_limit: 10000
+
+# Opt-in application-layer read-only guard; keep using read-only warehouse credentials.
+enable_fail_closed_sql_guard: false
+
+python_executor: docker
+
+# Visualization configuration
+visualization_mode: llm
+
+# Catalog store configuration
+catalog_store:
+  store_type: file_system
+  data_path: ./example
+
+# Data warehouse configuration
+data_warehouse_config:
+  # sqlite from spider->tracking_orders dataset
+  uri: "sqlite:///example/tracking_orders.sqlite"
+  database_name: ""
+
+# LLM configurations
+# Use OpenAI LLM, replace YOUR_API_KEY_HERE with your actual API key
+default_llm:
+  class: langchain_openai.ChatOpenAI
+  params:
+    api_key: YOUR_API_KEY_HERE
+    model: gpt-5.5
+    temperature: 0.01
+    max_tokens: 8192
+
+embedding_model:
+  class: langchain_openai.OpenAIEmbeddings
+  params:
+    api_key: YOUR_API_KEY_HERE
+    model: text-embedding-3-large
+    chunk_size: 1024
+
+# If you cannot access to OpenAI or other cloud LLM provider,
+# uncomment the following lines instead to use Ollama local LLM
+#default_llm:
+#  class: langchain_ollama.ChatOllama
+#  params:
+#    model: gpt-oss:20b
+#    temperature: 0.01
+#    num_predict: 8192

@@ -1,0 +1,5 @@
+id: c10_anomaly
+description: "detect anomalies in daily signup counts using python post-processing"
+input:
+  prompt: "Detect anomalies in daily signup counts"
+cassette: cassettes/c10_anomaly.jsonl

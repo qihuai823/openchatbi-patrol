@@ -1,0 +1,5 @@
+id: c12_text2sql
+description: "knowledge lookup for columns describing customer churn"
+input:
+  prompt: "What columns describe customer churn?"
+cassette: cassettes/c12_text2sql.jsonl

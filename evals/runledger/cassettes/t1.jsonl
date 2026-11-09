@@ -1,0 +1,1 @@
+{"tool":"search_knowledge","args":{"reasoning":"Look up relevant knowledge","query_list":["OpenChatBI"],"knowledge_bases":["columns"]},"ok":true,"result":{"columns":[{"column_name":"openchatbi","display_name":"OpenChatBI","category":"metric","type":"","description":"Project overview","alias":""}]}}

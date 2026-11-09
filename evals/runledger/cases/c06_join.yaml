@@ -1,0 +1,5 @@
+id: c06_join
+description: "join orders with customers to rank top spenders"
+input:
+  prompt: "Join orders with customers and list top 10 spenders"
+cassette: cassettes/c06_join.jsonl

@@ -1,0 +1,5 @@
+id: c08_timerange
+description: "sales aggregation over an explicit date range"
+input:
+  prompt: "What were sales between 2024-01-01 and 2024-03-31?"
+cassette: cassettes/c08_timerange.jsonl

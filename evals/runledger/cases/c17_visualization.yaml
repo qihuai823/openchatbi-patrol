@@ -1,0 +1,5 @@
+id: c17_visualization
+description: "forecast next quarter revenue using historical monthly data"
+input:
+  prompt: "Forecast next quarter revenue from history"
+cassette: cassettes/c17_visualization.jsonl

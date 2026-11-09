@@ -1,0 +1,5 @@
+id: c11_visualization
+description: "revenue trend chart for 2024 via sql then python plot"
+input:
+  prompt: "Plot the revenue trend for 2024"
+cassette: cassettes/c11_visualization.jsonl

@@ -1,0 +1,5 @@
+id: c20_report
+description: "summarize daily order volume and persist as a report"
+input:
+  prompt: "Summarize order volume and save it as a report"
+cassette: cassettes/c20_report.jsonl

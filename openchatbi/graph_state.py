@@ -1,0 +1,89 @@
+"""State classes for OpenChatBI graph execution."""
+
+from typing import Annotated, Any
+
+from langchain_core.messages import AIMessage, HumanMessage
+from langgraph.graph import MessagesState
+from langgraph.types import Send
+
+
+def add_history_messages(left: list, right: list):
+    if left:
+        total_messages = left + right
+    else:
+        total_messages = right
+    return total_messages
+
+
+class AgentState(MessagesState):
+    """State for the main agent graph execution.
+
+    Extends MessagesState with additional fields for routing and responses.
+    """
+
+    history_messages: Annotated[list[HumanMessage | AIMessage], add_history_messages]
+    agent_next_node: str
+    sends: list[Send]
+    sql: str
+    final_answer: str
+
+
+class SQLGraphState(MessagesState):
+    """State for SQL generation subgraph.
+
+    Contains rewritten question, table selection, extracted entities, and generated SQL.
+    """
+
+    visualize: bool
+    rewrite_question: str
+    tables: list[dict[str, Any]]
+    info_entities: dict[str, Any]
+    sql: str
+    sql_retry_count: int
+    extraction_tool_rounds: int  # Tool rounds information extraction has requested for the current question
+    sql_execution_result: str
+    schema_info: dict[str, Any]  # Data schema analysis results
+    data: str  # CSV data for display
+    previous_sql_errors: list[dict[str, Any]]
+    visualization_dsl: dict[str, Any]
+    sql_confidence: float
+    confidence_status: str
+    confidence_reasons: list[str]
+    confidence_diagnostics: list[str]
+    human_sql_decision: str
+    recovery_strategy: str  # Last error's recovery strategy (empty if none); see RecoveryStrategy
+
+
+class InputState(MessagesState):
+    """Input state schema for the main graph."""
+
+    pass
+
+
+class SQLInputState(MessagesState):
+    """Input state schema for the SQL generation subgraph."""
+
+    visualize: bool
+
+
+class OutputState(MessagesState):
+    """Output state schema for the main graph."""
+
+    pass
+
+
+class SQLOutputState(MessagesState):
+    """Output state schema for the SQL generation subgraph."""
+
+    rewrite_question: str
+    tables: list[dict[str, Any]]
+    sql: str
+    schema_info: dict[str, Any]  # Data schema analysis results
+    data: str  # CSV data for display
+    visualization_dsl: dict[str, Any]
+    sql_confidence: float
+    confidence_status: str
+    confidence_reasons: list[str]
+    confidence_diagnostics: list[str]
+    human_sql_decision: str
+    recovery_strategy: str  # Last error's recovery strategy (empty if none); see RecoveryStrategy

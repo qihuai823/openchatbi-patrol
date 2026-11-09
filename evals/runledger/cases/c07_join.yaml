@@ -1,0 +1,5 @@
+id: c07_join
+description: "anti-join to find products with orders but no shipments"
+input:
+  prompt: "Which products have orders but no shipments?"
+cassette: cassettes/c07_join.jsonl

@@ -1,0 +1,20 @@
+{% extends "!layout.html" %}
+
+{% block extrahead %}
+  {{ super() }}
+  <meta name="google-site-verification" content="geDcsz839O_UHavbn1pIpMOk6sJgneL4NlULcVJ4-KA" />
+  <script async src="https://www.googletagmanager.com/gtag/js?id=AW-17595718197"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', 'AW-17595718197');
+  </script>
+  <script>
+    gtag('event', 'conversion', {
+        'send_to': 'AW-17595718197/JxBiCPzC06AbELW0pcZB',
+        'value': 1.0,
+        'currency': 'SGD'
+    });
+  </script>
+{% endblock %}

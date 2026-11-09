@@ -1,0 +1,50 @@
+import sys
+from io import StringIO
+from typing import Any
+
+from RestrictedPython import compile_restricted, safe_globals, utility_builtins  # type: ignore[attr-defined]
+from RestrictedPython.Guards import safe_builtins, safer_getattr
+
+from openchatbi.code.executor_base import ExecutorBase
+
+
+class RestrictedLocalExecutor(ExecutorBase):
+
+    def run_code(self, code: str) -> tuple[bool, str]:
+        try:
+            # compile restricted code
+            byte_code = compile_restricted(code, "<string>", "exec")
+            if byte_code is None:
+                return False, "Failed to compile restricted code"  # type: ignore[unreachable]
+
+            restricted_locals: dict[str, Any] = {}
+            restricted_globals: dict[str, Any] = dict(safe_globals)
+
+            # Set up restricted environment with necessary functions
+            restricted_globals.update(safe_builtins)
+            restricted_globals["_getattr_"] = safer_getattr
+            restricted_globals["__builtins__"] = utility_builtins
+
+            # Add variable definitions to the restricted locals
+            for key, value in self._variable.items():
+                restricted_locals[key] = value
+
+            # Capture print output
+            original_stdout = sys.stdout
+            output_buffer = StringIO()
+            sys.stdout = output_buffer
+
+            # Use the standard print function for RestrictedPython
+            restricted_globals["_print_"] = lambda *args, **kwargs: print(*args, **kwargs)
+
+            # Intentional execution boundary after RestrictedPython compilation.
+            exec(byte_code, restricted_globals, restricted_locals)  # nosec B102
+            output = output_buffer.getvalue()
+
+            return True, output
+
+        except Exception as e:
+            return False, str(e)
+        finally:
+            if "original_stdout" in locals():
+                sys.stdout = original_stdout

@@ -1,0 +1,5 @@
+id: c05_aggregation
+description: "daily active users over a rolling 30-day window"
+input:
+  prompt: "Show daily active users for the last 30 days"
+cassette: cassettes/c05_aggregation.jsonl

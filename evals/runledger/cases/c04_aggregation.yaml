@@ -1,0 +1,5 @@
+id: c04_aggregation
+description: "average order value per customer"
+input:
+  prompt: "What is the average order value per customer?"
+cassette: cassettes/c04_aggregation.jsonl

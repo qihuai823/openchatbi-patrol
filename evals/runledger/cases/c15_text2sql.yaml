@@ -1,0 +1,5 @@
+id: c15_text2sql
+description: "schema inspection for the customers table"
+input:
+  prompt: "List the schema of the customers table"
+cassette: cassettes/c15_text2sql.jsonl

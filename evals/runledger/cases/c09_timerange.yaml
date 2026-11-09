@@ -1,0 +1,5 @@
+id: c09_timerange
+description: "month-over-month revenue comparison"
+input:
+  prompt: "Compare this month's revenue to last month"
+cassette: cassettes/c09_timerange.jsonl

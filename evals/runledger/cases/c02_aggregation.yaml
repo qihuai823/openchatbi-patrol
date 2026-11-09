@@ -1,0 +1,5 @@
+id: c02_aggregation
+description: "count aggregation over a time-filtered fact table"
+input:
+  prompt: "How many orders were placed in 2024?"
+cassette: cassettes/c02_aggregation.jsonl

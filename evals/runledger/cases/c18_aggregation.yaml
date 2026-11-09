@@ -1,0 +1,5 @@
+id: c18_aggregation
+description: "conversion rate breakdown by marketing channel"
+input:
+  prompt: "Break down conversion rate by channel"
+cassette: cassettes/c18_aggregation.jsonl

@@ -1,0 +1,323 @@
+"""Tests for text2sql information extraction functionality."""
+
+import json
+from datetime import date
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import pytest
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_core.outputs import ChatGeneration, ChatResult
+from langchain_openai import ChatOpenAI
+
+from openchatbi.graph_state import SQLGraphState
+from openchatbi.text2sql.extraction import (
+    _generate_extraction_prompt,
+    _parse_extracted_info_json,
+    information_extraction,
+    information_extraction_conditional_edges,
+)
+from openchatbi.tool.ask_human import AskHuman
+from openchatbi.tool.search_knowledge import search_knowledge
+
+
+class TestText2SQLExtraction:
+    """Test text2sql information extraction functionality."""
+
+    def test_generate_extraction_prompt(self):
+        """Test extraction prompt generation."""
+        prompt = _generate_extraction_prompt()
+
+        # Should replace time placeholder with today's date
+        today_str = date.today().strftime("%Y-%m-%d")
+        assert today_str in prompt
+
+        # Should contain basic knowledge
+        assert "[basic_knowledge_glossary]" not in prompt
+        assert "[time_field_placeholder]" not in prompt
+        assert "inherit the most recent explicit business subject" in prompt
+        assert "Show monthly order count for the recent 2 years" in prompt
+
+    def test_parse_extracted_info_json_valid(self):
+        """Test parsing valid JSON from LLM response."""
+        json_response = {
+            "keywords": ["revenue", "sales"],
+            "dimensions": ["date", "region"],
+            "metrics": ["total_revenue"],
+            "filters": [],
+        }
+
+        # Mock LLM response with JSON
+        llm_content = f"```json\n{json.dumps(json_response)}\n```"
+
+        with patch("openchatbi.text2sql.extraction.get_text_from_content", return_value=llm_content):
+            with patch("openchatbi.text2sql.extraction.extract_json_from_answer", return_value=json_response):
+                result = _parse_extracted_info_json(llm_content)
+
+        assert result == json_response
+        assert "keywords" in result
+        assert "dimensions" in result
+
+    def test_parse_extracted_info_json_invalid(self):
+        """Test parsing invalid JSON returns empty dict."""
+        invalid_content = "Not valid JSON content"
+
+        with patch("openchatbi.text2sql.extraction.get_text_from_content", return_value=invalid_content):
+            with patch("openchatbi.text2sql.extraction.extract_json_from_answer", side_effect=Exception("Parse error")):
+                result = _parse_extracted_info_json(invalid_content)
+
+        assert result == {}
+
+    def test_information_extraction_function_creation(self):
+        """Test creating information extraction function."""
+        mock_llm = Mock()
+
+        extraction_func = information_extraction(mock_llm)
+
+        # Should return a callable function
+        assert callable(extraction_func)
+
+    def test_information_extraction_successful(self):
+        """Test successful information extraction."""
+        mock_llm = Mock()
+
+        # Mock LLM response
+        extracted_info = {
+            "rewrite_question": "What is the total revenue by region?",
+            "keywords": ["revenue", "total"],
+            "dimensions": ["region"],
+            "metrics": ["revenue"],
+            "filters": [],
+        }
+
+        mock_response = AIMessage(content=json.dumps(extracted_info))
+
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", return_value=mock_response):
+            with patch("openchatbi.text2sql.extraction._parse_extracted_info_json", return_value=extracted_info):
+                extraction_func = information_extraction(mock_llm)
+
+                state = SQLGraphState(
+                    messages=[HumanMessage(content="Show me revenue by region")], question="Show me revenue by region"
+                )
+
+                result = extraction_func(state)
+
+        assert "info_entities" in result
+        assert result["rewrite_question"] == "What is the total revenue by region?"
+
+    def test_information_extraction_preserves_followup_business_context(self):
+        """Test follow-up extraction keeps inherited order metric context."""
+        mock_llm = Mock()
+
+        extracted_info = {
+            "rewrite_question": "Show monthly order count for the recent 2 years",
+            "keywords": ["order", "order count", "monthly"],
+            "dimensions": ["date_order_placed"],
+            "metrics": ["order count"],
+            "filters": [],
+            "start_time": "2024-05-01 00:00:00",
+            "end_time": "2026-05-30 23:59:59",
+        }
+
+        mock_response = AIMessage(content=json.dumps(extracted_info))
+
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", return_value=mock_response):
+            with patch("openchatbi.text2sql.extraction._parse_extracted_info_json", return_value=extracted_info):
+                extraction_func = information_extraction(mock_llm)
+
+                state = SQLGraphState(
+                    messages=[
+                        HumanMessage(content="帮我查下历史上年度的订单数"),
+                        AIMessage(content="年度订单数查询已完成。"),
+                        HumanMessage(content="帮我看下最近2年多月度数据"),
+                    ],
+                    question="帮我看下最近2年多月度数据",
+                )
+
+                result = extraction_func(state)
+
+        assert result["rewrite_question"] == "Show monthly order count for the recent 2 years"
+        assert "order count" in result["info_entities"]["metrics"]
+
+    def test_information_extraction_empty_response(self):
+        """Test handling empty extraction response."""
+        mock_llm = Mock()
+
+        mock_response = AIMessage(content="")
+
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", return_value=mock_response):
+            with patch("openchatbi.text2sql.extraction._parse_extracted_info_json", return_value={}):
+                extraction_func = information_extraction(mock_llm)
+
+                state = SQLGraphState(messages=[HumanMessage(content="Test question")], question="Test question")
+
+                result = extraction_func(state)
+
+        # Should handle empty response gracefully
+        assert "info_entities" in result
+        assert result["info_entities"] == {}
+
+    def test_information_extraction_conditional_edges_success(self):
+        """Test conditional edges with successful extraction."""
+        state = SQLGraphState(
+            messages=[HumanMessage(content="Test question")],
+            question="Test question",
+            rewrite_question="What is the total revenue by region?",
+            info_entities={"keywords": ["revenue"], "dimensions": ["date"]},
+        )
+
+        result = information_extraction_conditional_edges(state)
+
+        # Should proceed to next when rewrite_question exists
+        assert result == "next"
+
+    def test_information_extraction_conditional_edges_failure(self):
+        """Test conditional edges with failed extraction."""
+        state = SQLGraphState(
+            messages=[HumanMessage(content="Test question")], question="Test question", info_entities={}
+        )
+
+        result = information_extraction_conditional_edges(state)
+
+        # Should end when no info extracted
+        assert result == "end"
+
+    def test_information_extraction_conditional_edges_missing(self):
+        """Test conditional edges with missing info_entities."""
+        state = SQLGraphState(messages=[HumanMessage(content="Test question")], question="Test question")
+
+        result = information_extraction_conditional_edges(state)
+
+        # Should end when info_entities not present
+        assert result == "end"
+
+    def test_information_extraction_with_retry_on_failure(self):
+        """Test information extraction with retry mechanism."""
+        mock_llm = Mock()
+
+        # First call fails, second succeeds
+        extracted_info = {
+            "rewrite_question": "Test question",
+            "keywords": ["test"],
+            "dimensions": [],
+            "metrics": [],
+            "filters": [],
+        }
+
+        mock_response = AIMessage(content=json.dumps(extracted_info))
+
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", return_value=mock_response):
+            with patch("openchatbi.text2sql.extraction._parse_extracted_info_json", return_value=extracted_info):
+                extraction_func = information_extraction(mock_llm)
+
+                state = SQLGraphState(messages=[HumanMessage(content="Test question")], question="Test question")
+
+                result = extraction_func(state)
+
+        assert "info_entities" in result
+        assert result["info_entities"]["keywords"] == ["test"]
+
+    @pytest.mark.parametrize(
+        ("tool_name", "expected_route"), [("search_knowledge", "search_knowledge"), ("AskHuman", "ask_human")]
+    )
+    def test_information_extraction_accepts_tool_calls_with_openai_bound_tools(self, tool_name, expected_route):
+        """Test that tool calls are accepted when the bound tools nest their names under "function" (OpenAI format)."""
+        llm = (
+            ChatOpenAI(model="test-model", api_key="test-key")
+            .bind_tools([search_knowledge, AskHuman], strict=True)
+            .bind(response_format={"type": "json_object"})
+        )
+        ai_message = AIMessage(content="", tool_calls=[{"name": tool_name, "args": {}, "id": "call_1"}])
+        result_message = ChatResult(generations=[ChatGeneration(message=ai_message)])
+
+        with patch.object(ChatOpenAI, "_generate", return_value=result_message) as generate:
+            result = information_extraction(llm)(SQLGraphState(messages=[HumanMessage(content="Show GMV by region")]))
+
+        assert generate.call_count == 1
+        assert result["messages"][0].tool_calls[0]["name"] == tool_name
+        assert information_extraction_conditional_edges(result) == expected_route
+
+    def test_information_extraction_counts_tool_rounds(self):
+        """Test that each tool call adds a round and a new question starts the count again."""
+        ai_message = AIMessage(content="", tool_calls=[{"name": "search_knowledge", "args": {}, "id": "call_1"}])
+        tool_result = ToolMessage(content="No relevant knowledge found.", tool_call_id="call_0")
+
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", return_value=ai_message):
+            extraction_func = information_extraction(Mock())
+            continued = extraction_func(
+                SQLGraphState(messages=[HumanMessage(content="q"), tool_result], extraction_tool_rounds=2)
+            )
+            new_question = extraction_func(
+                SQLGraphState(messages=[HumanMessage(content="next q")], extraction_tool_rounds=4)
+            )
+
+        assert continued["extraction_tool_rounds"] == 3
+        assert new_question["extraction_tool_rounds"] == 1
+
+    def test_information_extraction_conditional_edges_tool_round_limit(self):
+        """Test that a tool call past the default round limit (10) ends extraction instead of running the tool."""
+        ai_message = AIMessage(content="", tool_calls=[{"name": "search_knowledge", "args": {}, "id": "call_1"}])
+
+        at_limit = SQLGraphState(messages=[ai_message], extraction_tool_rounds=10)
+        past_limit = SQLGraphState(messages=[ai_message], extraction_tool_rounds=11)
+
+        assert information_extraction_conditional_edges(at_limit) == "search_knowledge"
+        assert information_extraction_conditional_edges(past_limit) == "end"
+
+    def test_information_extraction_conditional_edges_tool_round_limit_from_config(self):
+        """Test that extraction_max_tool_rounds comes from Config, not a hardcoded limit."""
+        ai_message = AIMessage(content="", tool_calls=[{"name": "search_knowledge", "args": {}, "id": "call_1"}])
+
+        with patch("openchatbi.text2sql.extraction.config") as mock_cfg:
+            mock_cfg.get.return_value = SimpleNamespace(extraction_max_tool_rounds=2)
+            at_limit = SQLGraphState(messages=[ai_message], extraction_tool_rounds=2)
+            past_limit = SQLGraphState(messages=[ai_message], extraction_tool_rounds=3)
+
+            assert information_extraction_conditional_edges(at_limit) == "search_knowledge"
+            assert information_extraction_conditional_edges(past_limit) == "end"
+
+    def test_information_extraction_time_period_detection(self):
+        """Test time period detection in queries."""
+        mock_llm = Mock()
+
+        extracted_info = {
+            "rewrite_question": "Show data for the last 7 days",
+            "keywords": ["data"],
+            "dimensions": ["date"],
+            "metrics": [],
+            "filters": [],
+            "start_time": "2024-01-01",
+        }
+
+        mock_response = AIMessage(content=json.dumps(extracted_info))
+
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", return_value=mock_response):
+            with patch("openchatbi.text2sql.extraction._parse_extracted_info_json", return_value=extracted_info):
+                extraction_func = information_extraction(mock_llm)
+
+                state = SQLGraphState(
+                    messages=[HumanMessage(content="Test question")], question="Show data for last 7 days"
+                )
+
+                result = extraction_func(state)
+
+        assert "info_entities" in result
+        assert "start_time" in result["info_entities"]
+
+    def test_information_extraction_error_handling(self):
+        """Test error handling in information extraction."""
+        mock_llm = Mock()
+
+        # Mock call to raise exception
+        with patch("openchatbi.text2sql.extraction.call_llm_chat_model_with_retry", side_effect=Exception("LLM error")):
+            extraction_func = information_extraction(mock_llm)
+
+            state = SQLGraphState(messages=[HumanMessage(content="Test question")], question="Test question")
+
+            # Should raise exception as the function doesn't have try-catch
+            try:
+                extraction_func(state)
+                # Should not reach here
+                assert False, "Expected exception to be raised"
+            except Exception as e:
+                assert "LLM error" in str(e)

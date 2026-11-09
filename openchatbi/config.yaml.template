@@ -1,0 +1,142 @@
+organization: The Company
+dialect: presto
+bi_config_file: example/bi.yaml
+
+# SQL Execution Result Limit Configuration
+# Enabled by default to avoid fetching unbounded query results into memory and agent context.
+# enable_sql_result_limit: true
+# sql_result_limit: 10000
+
+# Text2SQL fail-closed SQL guard (opt-in; disabled by default for backward compatibility).
+# When enabled, only SELECT and WITH ... SELECT queries pass application-layer validation.
+# Use this as defense in depth together with read-only data warehouse credentials.
+# enable_fail_closed_sql_guard: false
+
+# Python Code Execution Configuration
+# Options: "local", "restricted_local", "docker"
+# - local: Run code in the current Python process (fastest, least secure)
+# - restricted_local: Run code with RestrictedPython (moderate security, some limitations)
+# - docker: Run code in isolated Docker containers (slowest, most secure, requires Docker to be installed)
+python_executor: local
+
+# Visualization configuration
+# Options: "rule" (rule-based), "llm" (LLM-based), or null (skip visualization)
+# visualization_mode: llm
+
+# Context management configuration
+# Controls how conversation context is managed and compressed when it becomes too long
+context_config:
+  # Enable/disable context management entirely
+  enabled: true
+
+  # Token limit that triggers context management (when conversation exceeds this, compression starts)
+  summary_trigger_tokens: 50000
+
+  # Number of recent messages to always preserve in full (never compress these)
+  keep_recent_messages: 30
+
+  # Historical tool output compression limits
+  max_tool_output_length: 3000  # Max length for historical tool outputs
+  max_sql_result_rows: 50       # Max rows to keep in CSV results
+  max_code_output_lines: 50     # Max lines for code execution output
+
+  # Conversation summarization settings
+  enable_summarization: true         # Enable conversation summarization
+  enable_conversation_summary: true  # Enable detailed conversation summary
+  summary_max_messages: 50           # Max messages to include in summary context
+
+  # Content preservation settings
+  preserve_tool_errors: true    # Always preserve error messages in full
+  preserve_recent_sql: true     # Preserve SQL content (less aggressive compression)
+
+# Time Series Forecasting Service Configuration
+# URL for the time series forecasting service endpoint, adjust based on your deployment scenario:
+# - Local development (OpenChatBI on host, Forecasting service in Docker): "http://localhost:8765"
+# - Remote service: "http://your-service-host:8765"
+timeseries_forecasting_service_url: "http://localhost:8765"
+# Optional override for the forecasting model's minimum input length. Leave unset to read it
+# automatically from the forecasting service /health (which derives it from the model config).
+# timeseries_forecasting_min_input_length: 96
+
+# Catalog store configuration
+catalog_store:
+  store_type: file_system
+  data_path: ./example
+
+# Data warehouse configuration
+data_warehouse_config:
+  uri: "presto://{user_name}@domain:8080/db/default"
+  include_tables:
+    - null  # null means include all tables, or specify yaml list
+  database_name: "db.default"  # database name to use in catalog
+  token_service: "https://tokens-domain:8080/v1"
+  user_name: TOKEN_SERVICE_USER_NAME
+  password: TOKEN_SERVICE_PASSWORD
+
+# Vector database (chroma) path
+# vector_db_path: ./.chroma_db
+
+# LLM configurations (multiple providers)
+#
+# 1) Define providers under `llm_providers`
+# 2) Select which one to use by setting `default_llm: <provider_name>`
+default_llm: openai
+llm_providers:
+  openai:
+    default_llm:
+      class: langchain_openai.ChatOpenAI
+      params:
+        api_key: YOUR_API_KEY_HERE
+        model: gpt-5.5
+        temperature: 0.01
+        max_tokens: 8192
+    embedding_model:
+      class: langchain_openai.OpenAIEmbeddings
+      params:
+        api_key: YOUR_API_KEY_HERE
+        model: text-embedding-3-large
+        chunk_size: 1024
+    # Optional
+    text2sql_llm:
+      class: langchain_openai.ChatOpenAI
+      params:
+        api_key: YOUR_API_KEY_HERE
+        model: gpt-5.5
+        temperature: 0.0
+        max_tokens: 8192
+    # Optional: dedicated LLM for the data analysis agent.
+    # Falls back to default_llm when omitted. Use a stronger reasoning model
+    # here if complex multi-step analysis benefits from it.
+    # analysis_llm:
+    #   class: langchain_openai.ChatOpenAI
+    #   params:
+    #     api_key: YOUR_API_KEY_HERE
+    #     model: gpt-5.5
+    #     temperature: 0.0
+    #     max_tokens: 8192
+  # anthropic:
+  #   default_llm:
+  #     class: langchain_anthropic.ChatAnthropic
+  #     params:
+  #       api_key: YOUR_API_KEY_HERE
+  #       model: claude-3-5-sonnet-latest
+
+# MCP (Model Context Protocol) server configurations
+mcp_servers:
+  # File system MCP server (stdio transport)
+  - name: filesystem
+    transport: stdio
+    command: ["npx", "-y", "@modelcontextprotocol/server-filesystem"]
+    args: ["--path", "/tmp"]
+    enabled: false
+    timeout: 30
+  
+
+  # Example HTTP-based MCP server (streamable_http transport)
+  - name: weather
+    transport: streamable_http
+    url: "http://localhost:8000/mcp/"
+    headers:
+      Authorization: "Bearer YOUR_TOKEN"
+    enabled: false
+    timeout: 30
