@@ -20,6 +20,16 @@ catalog_store:
   store_type: file_system
   data_path: ./example_ecommerce
 
+# Proactive anomaly patrol.
+# The patrol job runs out-of-band and writes its state here; the agent only
+# reads it through the `patrol_status` tool.
+#   python -m openchatbi.patrol --plan example_ecommerce/patrol_plan.yaml \
+#       --state example_ecommerce/patrol_state.sqlite
+patrol:
+  enabled: true
+  plan_file: example_ecommerce/patrol_plan.yaml
+  state_db: example_ecommerce/patrol_state.sqlite
+
 # Data warehouse configuration
 # E-commerce dataset derived from the Spider tracking_orders schema:
 # 5893 orders / 18727 order lines / 1000 SKUs / 998 customers, 2025-11-30 to 2026-05-31

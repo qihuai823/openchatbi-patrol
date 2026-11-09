@@ -19,6 +19,16 @@ _PRICES: dict[str, tuple[float, float]] = {
     "claude-3-5-haiku": (0.8, 4.0),
     "claude-sonnet-4": (3.0, 15.0),
     "claude-opus-4": (15.0, 75.0),
+    # DeepSeek (served through its OpenAI-compatible endpoint). Published rates
+    # for cache-miss input / output; they change often, so treat these as an
+    # order-of-magnitude estimate rather than a billing figure. The bare
+    # `deepseek` entry is a fallback: the API may report a model name that was
+    # never configured (e.g. `deepseek-flash` for a `deepseek-chat` request),
+    # and an unpriced model would silently report a $0.00 turn.
+    "deepseek": (0.28, 0.42),
+    "deepseek-chat": (0.28, 0.42),
+    "deepseek-flash": (0.28, 0.42),
+    "deepseek-reasoner": (0.28, 0.42),
 }
 
 

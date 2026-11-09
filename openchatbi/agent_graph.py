@@ -401,6 +401,14 @@ def _build_graph_core(
     # related health check. It is intentionally not exposed directly here.
     normal_tools.extend(mcp_tools)
 
+    # Proactive patrol results, read-only and only when `patrol.enabled` is set.
+    # Imported lazily so deployments without patrols never load the module.
+    from openchatbi.patrol.tool import patrol_status_tool
+
+    patrol_tool = patrol_status_tool()
+    if patrol_tool is not None:
+        normal_tools.append(patrol_tool)
+
     # Initialize context manager if enabled
     context_manager = None
     if enable_context_management:

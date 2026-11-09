@@ -52,6 +52,18 @@ class ObservabilityConfig(BaseModel):
     audit: AuditConfig = AuditConfig()
 
 
+class PatrolConfig(BaseModel):
+    """Proactive anomaly patrol settings.
+
+    The patrol job runs out-of-band (``python -m openchatbi.patrol``); this only
+    tells the agent where to read its results from.
+    """
+
+    enabled: bool = False
+    plan_file: str | None = None
+    state_db: str | None = None
+
+
 class Config(BaseModel):
     """Configuration model for the OpenChatBI application.
 
@@ -97,6 +109,9 @@ class Config(BaseModel):
 
     # MCP Servers Configuration
     mcp_servers: list[dict[str, Any]] = []
+
+    # Proactive Anomaly Patrol (read-only exposure to the agent)
+    patrol: PatrolConfig = PatrolConfig()
 
     # Report Configuration
     report_directory: str = "./data"

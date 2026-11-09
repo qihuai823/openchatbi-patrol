@@ -220,3 +220,8 @@ openspec
 .cursor
 .claude
 chroma_db_new
+# local secrets (never commit)
+*.local.yaml
+*.local.yml
+.env
+example_ecommerce/patrol_state.sqlite
