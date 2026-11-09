@@ -79,6 +79,25 @@ def test_below_threshold_observations_are_hidden_by_default() -> None:
     assert "3 lower-severity observation(s) hidden" in text
 
 
+def test_hidden_notice_does_not_advertise_the_flag() -> None:
+    """The notice must not read as an instruction to open the filter.
+
+    It used to say "pass include_below_threshold=true to list them". The model
+    treated that as a directive, listed all 15 low observations on a real turn,
+    and buried the 2 alerts that mattered. A dimension-heavy plan would blow the
+    context window the same way.
+    """
+    states = [_state("gmv", 0.42, pushed=1)] + [
+        _state(f"gmv_by_category|category={name}", 0.1) for name in ("beauty", "book")
+    ]
+
+    text = format_status(states, _plan(), [])
+
+    assert "2 lower-severity observation(s) hidden" in text
+    assert "pass include_below_threshold" not in text
+    assert "Do not list them" in text
+
+
 def test_include_below_threshold_shows_everything() -> None:
     states = [_state("gmv", 0.42, pushed=1), _state("gmv_by_category|category=beauty", 0.1)]
 

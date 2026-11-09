@@ -46,8 +46,10 @@ class PatrolStatusInput(BaseModel):
     include_below_threshold: bool = Field(
         default=False,
         description=(
-            "Also list deviations below the plan's minimum severity. These are stored as "
-            "open but were never pushed, so they are observations rather than alerts."
+            "Leave this false. Only set it to true when the user explicitly asks why a "
+            "specific alert was NOT reported. These entries are observations that never "
+            "reached the plan's severity floor; listing them by default buries the real "
+            "alerts under noise and wastes context."
         ),
     )
     limit: int = Field(default=20, ge=1, le=100, description="Maximum number of entries to return")
@@ -136,9 +138,15 @@ def format_status(
         lines = ["Patrol status: no open alerts"]
 
     if hidden and not include_below_threshold:
+        # Deliberately not advertising the flag here: the previous wording
+        # ("pass include_below_threshold=true to list them") read as an
+        # instruction, so the model dutifully listed all 15 low observations and
+        # buried the 2 real alerts. A dimension-heavy plan would blow the context
+        # window the same way. The flag stays available for the one question that
+        # needs it, but only on an explicit ask.
         lines.append(
-            f"{hidden} lower-severity observation(s) hidden (below the {threshold.value} threshold); "
-            "pass include_below_threshold=true to list them"
+            f"{hidden} lower-severity observation(s) hidden (below the {threshold.value} threshold). "
+            "Do not list them unless the user explicitly asks why something was not reported."
         )
     if truncated:
         lines.append(f"{truncated} more alert(s) not shown (limit={limit})")
