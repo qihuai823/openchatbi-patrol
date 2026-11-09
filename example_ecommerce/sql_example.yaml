@@ -1,0 +1,108 @@
+'': 
+  Customers: |
+    Q: Which states have the most customers?
+    A: SELECT state, COUNT(*) AS customer_count
+    FROM Customers
+    GROUP BY state
+    ORDER BY customer_count DESC
+    LIMIT 10
+    
+    Q: Who are the top 10 customers by revenue?
+    A: SELECT c.customer_id, c.customer_name, c.state,
+      SUM(oi.line_amount) AS gmv
+    FROM Customers c
+    JOIN Orders o ON c.customer_id = o.customer_id
+    JOIN Order_Items oi ON o.order_id = oi.order_id
+    WHERE o.order_status != 'Canceled'
+    GROUP BY c.customer_id, c.customer_name, c.state
+    ORDER BY gmv DESC
+    LIMIT 10
+  Orders: |
+    Q: Show monthly GMV for the last six months
+    A: SELECT strftime('%Y-%m', o.date_order_placed) AS month,
+      SUM(oi.line_amount) AS gmv,
+      COUNT(DISTINCT o.order_id) AS orders
+    FROM Orders o
+    JOIN Order_Items oi ON o.order_id = oi.order_id
+    WHERE o.order_status != 'Canceled'
+      AND o.date_order_placed >= '2025-12-01'
+    GROUP BY month
+    ORDER BY month
+    
+    Q: What is the order count and GMV by sales channel?
+    A: SELECT o.order_channel,
+      COUNT(DISTINCT o.order_id) AS orders,
+      SUM(oi.line_amount) AS gmv
+    FROM Orders o
+    JOIN Order_Items oi ON o.order_id = oi.order_id
+    WHERE o.order_status != 'Canceled'
+    GROUP BY o.order_channel
+    ORDER BY gmv DESC
+  Order_Items: |
+    Q: Which product categories generate the most revenue?
+    A: SELECT p.category,
+      SUM(oi.line_amount) AS gmv,
+      SUM(oi.quantity) AS units
+    FROM Order_Items oi
+    JOIN Products p ON oi.product_id = p.product_id
+    JOIN Orders o ON oi.order_id = o.order_id
+    WHERE o.order_status != 'Canceled'
+    GROUP BY p.category
+    ORDER BY gmv DESC
+    
+    Q: What is the average order value per month?
+    A: SELECT strftime('%Y-%m', o.date_order_placed) AS month,
+      SUM(oi.line_amount) / COUNT(DISTINCT o.order_id) AS aov
+    FROM Orders o
+    JOIN Order_Items oi ON o.order_id = oi.order_id
+    WHERE o.order_status != 'Canceled'
+    GROUP BY month
+    ORDER BY month
+  Products: |
+    Q: How many SKUs fall into each price band?
+    A: SELECT CASE WHEN unit_price < 20 THEN 'entry'
+        WHEN unit_price < 100 THEN 'mid'
+        ELSE 'premium' END AS price_band,
+      COUNT(*) AS sku_count
+    FROM Products
+    GROUP BY price_band
+    ORDER BY sku_count DESC
+    
+    Q: Compare gross margin across categories
+    A: SELECT p.category,
+      SUM(oi.line_amount) AS gmv,
+      SUM(oi.line_amount - oi.quantity * p.unit_cost) AS gross_profit,
+      ROUND(SUM(oi.line_amount - oi.quantity * p.unit_cost) / SUM(oi.line_amount), 4) AS gross_margin
+    FROM Order_Items oi
+    JOIN Products p ON oi.product_id = p.product_id
+    JOIN Orders o ON oi.order_id = o.order_id
+    WHERE o.order_status != 'Canceled'
+    GROUP BY p.category
+    ORDER BY gross_margin DESC
+  Shipments: |
+    Q: What is the average fulfillment lead time in days?
+    A: SELECT ROUND(AVG(julianday(s.shipment_date) - julianday(o.date_order_placed)), 2) AS avg_lead_days,
+      COUNT(*) AS shipments
+    FROM Shipments s
+    JOIN Orders o ON s.order_id = o.order_id
+    
+    Q: How many shipments were dispatched each month?
+    A: SELECT strftime('%Y-%m', shipment_date) AS month,
+      COUNT(*) AS shipments
+    FROM Shipments
+    GROUP BY month
+    ORDER BY month
+  Invoices: |
+    Q: How many invoices were issued each month?
+    A: SELECT strftime('%Y-%m', invoice_date) AS month,
+      COUNT(*) AS invoice_count
+    FROM Invoices
+    GROUP BY month
+    ORDER BY month
+  Shipment_Items: |
+    Q: Which products are inside shipment 3676?
+    A: SELECT si.shipment_id, p.product_name, p.category, oi.quantity
+    FROM Shipment_Items si
+    JOIN Order_Items oi ON si.order_item_id = oi.order_item_id
+    JOIN Products p ON oi.product_id = p.product_id
+    WHERE si.shipment_id = 3676

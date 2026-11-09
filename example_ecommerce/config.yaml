@@ -1,0 +1,51 @@
+organization: DemoCommerce
+dialect: sqlite
+bi_config_file: example_ecommerce/bi.yaml
+
+# SQL Execution Result Limit Configuration
+enable_sql_result_limit: true
+sql_result_limit: 10000
+
+# Opt-in application-layer read-only guard; keep using read-only warehouse credentials.
+enable_fail_closed_sql_guard: false
+
+# Options: "local", "restricted_local", "docker"
+python_executor: local
+
+# Visualization configuration
+visualization_mode: llm
+
+# Catalog store configuration
+catalog_store:
+  store_type: file_system
+  data_path: ./example_ecommerce
+
+# Data warehouse configuration
+# E-commerce dataset derived from the Spider tracking_orders schema:
+# 5893 orders / 18727 order lines / 1000 SKUs / 998 customers, 2025-11-30 to 2026-05-31
+data_warehouse_config:
+  uri: "sqlite:///example_ecommerce/ecommerce.sqlite"
+  database_name: ""
+
+# LLM configurations
+# DeepSeek exposes an OpenAI-compatible endpoint, so the OpenAI client works as-is.
+# Replace YOUR_DEEPSEEK_API_KEY_HERE, or point CONFIG_FILE at your own copy
+# (e.g. `CONFIG_FILE=example_ecommerce/config.local.yaml`) so the key never
+# lands in version control.
+default_llm:
+  class: langchain_openai.ChatOpenAI
+  params:
+    api_key: YOUR_DEEPSEEK_API_KEY_HERE
+    base_url: https://api.deepseek.com
+    model: deepseek-chat
+    temperature: 0.01
+    max_tokens: 8192
+
+# DeepSeek does not serve an embeddings endpoint. Leaving `embedding_model`
+# unset makes the retriever fall back to BM25 only, which is fine for this
+# catalog (small table count, keyword-heavy questions).
+# embedding_model:
+#   class: langchain_openai.OpenAIEmbeddings
+#   params:
+#     api_key: YOUR_API_KEY_HERE
+#     model: text-embedding-3-large

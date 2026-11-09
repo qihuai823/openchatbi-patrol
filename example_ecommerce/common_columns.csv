@@ -1,4 +1,4 @@
-﻿column_name,display_name,alias,type,category,tag,description,dimension_table,default
+column_name,display_name,alias,type,category,tag,description,dimension_table,default
 customer_id,Customer ID,"cust_id,客户ID,客户编号",INTEGER,identifier,customer,Unique identifier for customer accounts,Customers,
 customer_name,Customer Name,"cust_name,客户名称,客户名",VARCHAR(80),attribute,customer,Registered name of the customer account,Customers,
 customer_details,Customer Details,"cust_details,客户详情",VARCHAR(255),attribute,customer,Free-text notes about the customer. Never aggregate this column,Customers,

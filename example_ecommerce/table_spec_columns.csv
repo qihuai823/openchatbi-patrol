@@ -1,0 +1,5 @@
+db_name,table_name,column_name,display_name,alias,type,category,tag,description
+,Products,unit_price,List Price,"list_price,挂牌价,标价,定价",REAL,metric,product,Current catalog list price per unit for this SKU. Use it only for price bands or current catalog value - it is NOT the price the customer paid. Historical revenue must come from Order_Items.unit_price.
+,Order_Items,unit_price,Unit Price at Order Time,"成交单价,下单单价,售价,单价",REAL,metric,order,Price per unit actually charged on this order line at order time. This is the revenue truth for history; Products.unit_price is only the current list price. line_amount is quantity multiplied by this value.
+,Order_Items,order_id,Parent Order ID,"父订单号,所属订单,订单号",INTEGER,identifier,order,"Foreign key to Orders.order_id - the order this line belongs to. Join here to reach order-level attributes such as order_status, order_channel and date_order_placed."
+,Shipments,order_id,Shipped Order ID,"发货订单号,所属订单,订单号",INTEGER,identifier,shipment,"Foreign key to Orders.order_id identifying which order this dispatch fulfils. One order can produce several shipments, so joining inflates row counts - aggregate Orders before counting orders."
