@@ -21,34 +21,27 @@ from typing import Any
 
 from langchain_core.messages import AIMessage, AIMessageChunk, ToolMessage
 
+from openchatbi.node_roles import (
+    DEFAULT_MAIN_NODES,
+    DEFAULT_SQL_NODES,
+    DEFAULT_SUB_AGENT_LABEL,
+    NodeRoleTable,
+)
 from openchatbi.observability.pricing import estimate_cost
 from openchatbi.utils import get_text_from_content, get_text_from_message_chunk
 
-# Node names that belong to the text2sql SQL subgraph. Their intermediate token
-# stream is intentionally not surfaced as raw "thinking" because the dedicated
-# `updates` handlers below already render them (SQL, tables, etc.).
-SQL_SUBGRAPH_NODES = {
-    "search_knowledge",
-    "ask_human",
-    "information_extraction",
-    "table_selection",
-    "generate_sql",
-    "execute_sql",
-    "regenerate_sql",
-    "generate_visualization",
-    "score_sql",
-    "confidence_gate",
-}
-
-# Node names of the top-level agent graph (openchatbi). Anything else that
-# bubbles up at depth 0 is the data analysis sub-agent: because it is invoked
-# with a reset checkpoint namespace (see analysis/agent._build_sub_agent_config),
-# the deepagents `model`/`tools`/middleware nodes are flattened onto depth 0
-# instead of appearing as a nested subgraph.
-MAIN_GRAPH_NODES = {"llm_node", "use_tool", "ask_human"}
-
-# Display label used for the (flattened) data analysis sub-agent layer.
-SUBAGENT_LABEL = "data_analysis"
+# Node roles are declared in `openchatbi.node_roles`. These aliases keep the old
+# public names working; new code should build an explicit `NodeRoleTable` (see
+# `NodeRoleTable.from_graph`) and pass it to `AgentStreamProcessor`.
+#
+#   SQL_SUBGRAPH_NODES -- text2sql subgraph nodes whose token stream is
+#       suppressed because the dedicated `updates` handlers below render them.
+#   MAIN_GRAPH_NODES   -- top-level agent graph nodes.
+#   SUBAGENT_LABEL     -- display label for the (flattened) data analysis
+#       sub-agent layer.
+SQL_SUBGRAPH_NODES = DEFAULT_SQL_NODES
+MAIN_GRAPH_NODES = DEFAULT_MAIN_NODES
+SUBAGENT_LABEL = DEFAULT_SUB_AGENT_LABEL
 
 
 @dataclass
@@ -190,10 +183,21 @@ class AgentStreamProcessor:
     an accumulator of the main agent's answer tokens for final-answer extraction).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, roles: NodeRoleTable | None = None) -> None:
+        self.roles = roles if roles is not None else NodeRoleTable()
         self._data_csv: Any = None
         self.final_response: str = ""
         self.turn_usage: StreamUsage = StreamUsage(turn_tokens=0, turn_cost_usd=0.0, by_model={})
+
+    @property
+    def unclassified_nodes(self) -> set[str]:
+        """Depth-0 node names the role table could not classify.
+
+        Empty means the role table describes the graph being streamed. A name
+        showing up here is a silent-misclassification warning: it is being
+        rendered with the legacy "flattened sub-agent" fallback.
+        """
+        return self.roles.unclassified_depth0
 
     def process(self, namespace: tuple, event_type: str, event_value: Any) -> list[StreamEvent]:
         """Parse a single astream triple into zero or more stream events."""
@@ -241,36 +245,32 @@ class AgentStreamProcessor:
         if not token:
             return
 
-        if depth == 0 and node == "llm_node" and metadata.get("streaming_tokens", False):
+        role = self.roles.resolve(node, depth, layer_label)
+        if role.answer_node and metadata.get("streaming_tokens", False):
             # Main agent streaming its (intermediate/final) answer.
             self.final_response += token
-            yield StreamToken(text=token, level=0, label="main", is_final=True)
-        elif node in SQL_SUBGRAPH_NODES:
-            # SQL subgraph internal LLM tokens: rendered as steps via `updates`.
-            return
-        elif depth == 0 and node in MAIN_GRAPH_NODES:
-            # Other main-graph nodes don't carry a useful thinking trace.
+            yield StreamToken(text=token, level=0, label=role.label or "main", is_final=True)
+        elif role.suppress_tokens or role.level == 0:
+            # Rendered by the dedicated `updates` handlers, or a main-graph node
+            # that carries no useful thinking trace.
             return
         else:
-            # Sub-agent (data analysis) LLM thinking tokens. They bubble up
-            # nested (depth>0) or flattened onto depth 0 (reset checkpoint ns).
-            level = depth if depth > 0 else 1
-            label = layer_label if depth > 0 else SUBAGENT_LABEL
-            yield StreamToken(text=token, level=level, label=label, is_final=False)
+            # Sub-agent LLM thinking tokens. They bubble up nested (depth>0) or
+            # flattened onto depth 0 (reset checkpoint namespace).
+            yield StreamToken(
+                text=token,
+                level=role.level,
+                label=role.label or layer_label,
+                is_final=False,
+            )
 
     def _process_updates(self, depth: int, layer_label: str, event_value: Any) -> Iterator[StreamEvent]:
         for node_name, node_output in event_value.items():
             if not isinstance(node_output, dict):
                 continue
 
-            is_main_node = depth == 0 and node_name in MAIN_GRAPH_NODES
-            if is_main_node:
-                level, label = 0, "main"
-            elif depth == 0:
-                # deepagents sub-agent node flattened onto depth 0.
-                level, label = 1, SUBAGENT_LABEL
-            else:
-                level, label = depth, layer_label
+            role = self.roles.resolve(node_name, depth, layer_label)
+            level, label = role.level, role.label or layer_label
 
             matched = True
             kind = "generic"
@@ -278,11 +278,11 @@ class AgentStreamProcessor:
             data: dict[str, Any] = {}
             extra_steps: list[StreamStep] = []
 
-            if node_name == "llm_node":
+            if role.answer_node:
                 message_obj = (_message_list(node_output.get("messages")) or [None])[0]
                 if isinstance(message_obj, AIMessage) and message_obj.tool_calls:
                     sub_agents = [
-                        t["name"] for t in message_obj.tool_calls if t["name"] in ("data_analysis", "text2sql")
+                        t["name"] for t in message_obj.tool_calls if t["name"] in self.roles.sub_agent_tools
                     ]
                     normal_tools = [t["name"] for t in message_obj.tool_calls if t["name"] not in sub_agents]
                     if normal_tools:
@@ -393,7 +393,7 @@ class AgentStreamProcessor:
                 yield StreamStep(text=desc, level=level, label=label, kind=kind, data=data)
 
             # Generic fallback for sub-agent nodes (deepagents `model`/`tools`).
-            if not matched and not is_main_node:
+            if not matched and role.level > 0:
                 for generic_desc in _describe_generic_node(node_output):
                     yield StreamStep(text=generic_desc, level=level, label=label, kind="generic")
 
