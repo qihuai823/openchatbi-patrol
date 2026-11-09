@@ -16,6 +16,13 @@ sub-agent" rule. All four failure modes of that approach are silent:
 ``NodeRoleTable()`` reproduces today's behaviour exactly (see the golden test
 ``test_default_table_matches_legacy_behaviour``), while every assumption is
 overridable and unclassified depth-0 nodes are recorded instead of guessed away.
+
+A note on ``unknown_depth0``, measured rather than assumed: in practice every
+sub-agent node arrives *nested* (``depth=1``), so the depth-0 fallback is a
+safety net that a real turn never reaches - ``unclassified_depth0`` stayed empty
+across text2sql, python-analysis and data_analysis turns. It is kept because the
+alternative (raising or mislabelling) is worse than recording, not because it
+carries the main path.
 """
 
 from __future__ import annotations
@@ -46,6 +53,8 @@ class NodeRole:
 
 MAIN = NodeRole(level=0, label="main")
 ANSWER = NodeRole(level=0, label="main", answer_node=True)
+#: Role for a sub-agent node seen at depth 0. In practice sub-agent nodes arrive
+#: nested, so this only backs the defensive depth-0 fallback.
 FLATTENED_SUB_AGENT = NodeRole(level=1, label="data_analysis")
 SQL_SUBGRAPH = NodeRole(level=1, suppress_tokens=True)
 
@@ -73,8 +82,17 @@ DEFAULT_SQL_NODES = frozenset(
     }
 )
 
-# deepagents' create_deep_agent nodes. They are flattened onto depth 0 because
-# the sub-agent runs with a reset checkpoint namespace.
+# deepagents' create_deep_agent nodes.
+#
+# Measured against a real turn (LangGraph 1.x, `subgraphs=True`), these arrive
+# *nested* - `depth=1`, namespace `('use_tool:<uuid>',)` - not flattened onto
+# depth 0. The comment in the pre-refactor code claimed otherwise, and that
+# claim is what made the "anything unknown at depth 0 is the data_analysis
+# sub-agent" rule look load-bearing.
+#
+# They stay declared anyway: the depth-0 fallback is cheap insurance against a
+# future LangGraph/deepagents version that does flatten them, and `model`/`tools`
+# are still the names to match if it happens.
 DEFAULT_SUB_AGENT_NODES = frozenset({"model", "tools"})
 
 DEFAULT_ANSWER_NODE = "llm_node"

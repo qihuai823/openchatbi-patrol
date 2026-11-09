@@ -37,8 +37,8 @@ from openchatbi.utils import get_text_from_content, get_text_from_message_chunk
 #   SQL_SUBGRAPH_NODES -- text2sql subgraph nodes whose token stream is
 #       suppressed because the dedicated `updates` handlers below render them.
 #   MAIN_GRAPH_NODES   -- top-level agent graph nodes.
-#   SUBAGENT_LABEL     -- display label for the (flattened) data analysis
-#       sub-agent layer.
+#   SUBAGENT_LABEL     -- display label for the data analysis sub-agent layer,
+#       used when a sub-agent node shows up at depth 0 (see node_roles).
 SQL_SUBGRAPH_NODES = DEFAULT_SQL_NODES
 MAIN_GRAPH_NODES = DEFAULT_MAIN_NODES
 SUBAGENT_LABEL = DEFAULT_SUB_AGENT_LABEL
@@ -195,7 +195,8 @@ class AgentStreamProcessor:
 
         Empty means the role table describes the graph being streamed. A name
         showing up here is a silent-misclassification warning: it is being
-        rendered with the legacy "flattened sub-agent" fallback.
+        rendered with the legacy depth-0 sub-agent fallback, which no real turn
+        has hit yet (all sub-agent nodes arrive nested at depth>0).
         """
         return self.roles.unclassified_depth0
 
@@ -255,8 +256,8 @@ class AgentStreamProcessor:
             # that carries no useful thinking trace.
             return
         else:
-            # Sub-agent LLM thinking tokens. They bubble up nested (depth>0) or
-            # flattened onto depth 0 (reset checkpoint namespace).
+            # Sub-agent LLM thinking tokens. Measured: they arrive nested
+            # (depth>0); the depth-0 case only exists as a fallback.
             yield StreamToken(
                 text=token,
                 level=role.level,
