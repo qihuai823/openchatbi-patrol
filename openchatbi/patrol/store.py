@@ -15,6 +15,7 @@ subsystem must be importable and runnable without the warehouse ORM stack.
 from __future__ import annotations
 
 import sqlite3
+import threading
 from datetime import datetime
 from pathlib import Path
 
@@ -67,8 +68,10 @@ class AlertStateStore:
         self.path = Path(path)
         if self.path.parent and str(self.path.parent) not in ("", "."):
             self.path.parent.mkdir(parents=True, exist_ok=True)
-        self._conn = sqlite3.connect(str(self.path))
+        self._conn = sqlite3.connect(str(self.path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        # Graph nodes run in worker threads, so ledger writes need a lock.
+        self._lock = threading.RLock()
         self._conn.executescript(SCHEMA)
         self._conn.commit()
 
@@ -173,14 +176,15 @@ class AlertStateStore:
 
     def run_begin(self, run_id: str, metric_key: str, now: datetime) -> None:
         """Record that ``metric_key`` has started under ``run_id``."""
-        self._conn.execute(
-            "INSERT INTO run_ledger (run_id, metric_key, status, started_at, finished_at, error) "
-            "VALUES (?, ?, 'running', ?, NULL, NULL) "
-            "ON CONFLICT(run_id, metric_key) DO UPDATE SET "
-            "status='running', started_at=excluded.started_at, finished_at=NULL, error=NULL",
-            (run_id, metric_key, now.isoformat()),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "INSERT INTO run_ledger (run_id, metric_key, status, started_at, finished_at, error) "
+                "VALUES (?, ?, 'running', ?, NULL, NULL) "
+                "ON CONFLICT(run_id, metric_key) DO UPDATE SET "
+                "status='running', started_at=excluded.started_at, finished_at=NULL, error=NULL",
+                (run_id, metric_key, now.isoformat()),
+            )
+            self._conn.commit()
 
     def run_finish(
         self,
@@ -190,11 +194,12 @@ class AlertStateStore:
         error: str | None = None,
     ) -> None:
         """Mark a metric finished; ``error`` turns it into a retryable failure."""
-        self._conn.execute(
-            "UPDATE run_ledger SET status=?, finished_at=?, error=? WHERE run_id=? AND metric_key=?",
-            ("failed" if error else "done", now.isoformat(), error, run_id, metric_key),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                "UPDATE run_ledger SET status=?, finished_at=?, error=? WHERE run_id=? AND metric_key=?",
+                ("failed" if error else "done", now.isoformat(), error, run_id, metric_key),
+            )
+            self._conn.commit()
 
     def run_states(self, run_id: str) -> dict[str, str]:
         """Return ``{metric_key: status}`` for one run."""

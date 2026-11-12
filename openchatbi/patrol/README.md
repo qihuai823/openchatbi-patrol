@@ -242,3 +242,58 @@ python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
 实测一次：1.5 秒后强杀，留下 33 个 `done`；`--resume` 只处理剩余 52 条序列，最终 85 个指标全部 `done`、0 失败、无残留 `running`。
 
 顺带一个启动开销的修正：`openchatbi/__init__.py` 原来在 import 时就把配置和 LLM 栈全部加载（约 9 秒），而巡检本来就声明「不需要 LLM」。改成惰性加载后 `import openchatbi` 从 8.96s 降到 0.84s，85 个指标的一轮巡检从 9.3s 降到 2.6s。
+
+## 节点级断点续跑（`--engine graph`）
+
+默认引擎是 `sequential`：一个 `for` 循环，按**指标**记录进度。它够快、依赖最少，适合 cron。
+缺点是进程如果在某个指标内部死掉，那个指标要从头再算一遍。
+
+`--engine graph` 换成一张 LangGraph 状态图，每个指标是一个节点任务，整张图的状态用
+`SqliteSaver` 落到检查点文件里：
+
+```
+prepare ──Send 扇出──► evaluate（每个指标一个节点任务）
+                              │
+                              ▼
+                    decide（去重 / 冷却 / 升降级）
+                              ▼
+                    commit（写告警状态）
+                              ▼
+                    notify（推送，按审计日志幂等）
+                              ▼
+                           finish
+```
+
+同一个 `--run-id` 配上同一个 `--checkpoints` 文件，重跑时 LangGraph 只会补跑没写完的
+节点任务，已经写入检查点的指标不会重新取数。这就是**节点级**续跑。
+
+### 演示
+
+```bash
+# 串行跑 85 个指标，6 秒后强杀（模拟调度窗口到点 / 进程被 kill）
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
+    --engine graph --concurrency 1 \
+    --state /tmp/patrol.sqlite --checkpoints /tmp/patrol_cp.sqlite \
+    --run-id nightly --notify none &
+sleep 6 && kill -9 %1
+
+# 看停在哪：实测此时 43 个指标 done，剩下 42 个没跑
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --ledger
+
+# 续跑：只补没完成的那部分，最终 85 个全部 done
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
+    --engine graph --concurrency 1 \
+    --state /tmp/patrol.sqlite --checkpoints /tmp/patrol_cp.sqlite \
+    --run-id nightly --resume --notify none
+```
+
+### 两个刻意的约束
+
+- **`--concurrency` 默认不限**，但一张计划可能同时扇出几十个查询。对着真实仓库要设个上限，
+  `1` 就是串行；演示时也用它，因为并行太快反而掐不准中断点。
+- **副作用节点必须幂等**。检查点可能让 `commit` / `notify` 重复执行，所以通知前会查审计日志，
+  已经记过 `pushed` 的同一 `(指纹, 桶)` 不再发一次。
+
+`run_ledger` 在两种引擎下都会写，所以 `--ledger` 的用法不变；区别只在于：`sequential` 靠它续跑，
+`graph` 靠检查点续跑，ledger 退化成跨轮次的可读审计。

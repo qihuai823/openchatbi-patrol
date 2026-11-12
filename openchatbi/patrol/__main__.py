@@ -35,6 +35,7 @@ from datetime import datetime
 from openchatbi.patrol.notify import ConsoleNotifier, JsonlNotifier, MultiNotifier, NullNotifier, WebhookNotifier
 from openchatbi.patrol.plan import PatrolPlan, PlanError
 from openchatbi.patrol.runner import PatrolError, PatrolRunner
+from openchatbi.patrol.graph import PatrolGraphRunner
 from openchatbi.patrol.store import AlertStateStore
 
 
@@ -61,6 +62,23 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--resume", action="store_true", help="skip metrics already done under --run-id")
     parser.add_argument("--limit", type=int, default=None, help="evaluate at most N remaining metrics")
     parser.add_argument("--ledger", action="store_true", help="print the run ledger for --run-id and exit")
+    parser.add_argument(
+        "--engine",
+        choices=("sequential", "graph"),
+        default="sequential",
+        help="sequential: light loop, metric-level ledger; graph: LangGraph with node-level checkpoints",
+    )
+    parser.add_argument(
+        "--checkpoints",
+        default="patrol_checkpoints.sqlite",
+        help="checkpoint database for --engine graph",
+    )
+    parser.add_argument(
+        "--concurrency",
+        type=int,
+        default=None,
+        help="cap parallel metric nodes for --engine graph (1 = sequential)",
+    )
     return parser
 
 
@@ -124,13 +142,30 @@ def main(argv: list[str] | None = None) -> int:
                     for key, status in states.items():
                         print(f"{key:<24}{status}")
                 return 0
-            result = runner.run(
-                now=now,
-                dry_run=args.dry_run,
-                run_id=run_id,
-                resume=args.resume,
-                limit=args.limit,
-            )
+            if args.engine == "graph":
+                graph_runner = PatrolGraphRunner(
+                    plan,
+                    store,
+                    make_notifier(args),
+                    database=args.db,
+                    checkpoint_path=args.checkpoints,
+                )
+                result = graph_runner.run(
+                    now=now,
+                    dry_run=args.dry_run,
+                    run_id=run_id,
+                    resume=args.resume,
+                    limit=args.limit,
+                    concurrency=args.concurrency,
+                )
+            else:
+                result = runner.run(
+                    now=now,
+                    dry_run=args.dry_run,
+                    run_id=run_id,
+                    resume=args.resume,
+                    limit=args.limit,
+                )
         except PatrolError as exc:
             print(f"run failed: {exc}", file=sys.stderr)
             return 1
