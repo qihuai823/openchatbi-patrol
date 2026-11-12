@@ -225,3 +225,7 @@ chroma_db_new
 *.local.yml
 .env
 example_ecommerce/patrol_state.sqlite
+
+# 巡检运行时状态库（本地生成，不入库）
+patrol_state.sqlite
+*.sqlite-journal
