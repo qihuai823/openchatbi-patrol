@@ -198,6 +198,9 @@ class PatrolResult:
     pushed: list[Alert] = field(default_factory=list)
     suppressed: list[tuple[Alert, str]] = field(default_factory=list)
     resolved: list[str] = field(default_factory=list)
+    skipped_metrics: int = 0
+    failed_metrics: int = 0
+    run_id: str = ""
     errors: list[str] = field(default_factory=list)
 
     @property

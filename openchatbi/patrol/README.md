@@ -190,3 +190,32 @@ pytest tests/patrol -o addopts=""
 ```
 
 覆盖：基线鲁棒性（含单点巨值污染）、星期周期性、评分曲线断点、四道闸的每条分支、抑制规则匹配、计划校验的全部失败路径、端到端运行、冷却抑制、dry-run 不落状态、维度拆分、恢复标记、不完整尾部桶。
+
+
+## 断点续跑（resume）
+
+一次巡检可能覆盖几十个指标，中途被 kill 或调度窗口到点，不应该让已完成的指标重跑，也不应该让没跑到的指标被当成「已消失」。
+
+`run_ledger` 表按 `(run_id, metric_key)` 记录每个指标的状态：
+
+| 状态 | 含义 | 重跑时行为 |
+| --- | --- | --- |
+| `running` | 已开始，进程被杀 | 重新评估 |
+| `done` | 已完成 | 跳过 |
+| `failed` | 指标自身报错（如 SQL 失效） | 重试 |
+
+```bash
+# 只跑前两个指标（模拟调度窗口到点 / 中途中断）
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --limit 2
+
+# 查看这个 run 进行到哪了
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --ledger
+
+# 接着把剩下的跑完
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --resume
+```
+
+一个刻意的约束：**告警结案（resolve）只在整个计划完整跑完时才执行**。部分运行里被跳过的指标根本没有被评估，把它们名下的告警结案，等于把仍然存在的问题静默关掉。

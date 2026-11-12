@@ -45,6 +45,18 @@ CREATE TABLE IF NOT EXISTS alert_log (
 
 CREATE INDEX IF NOT EXISTS idx_alert_log_key ON alert_log(fingerprint_key);
 CREATE INDEX IF NOT EXISTS idx_alert_log_created ON alert_log(created_at);
+
+CREATE TABLE IF NOT EXISTS run_ledger (
+    run_id      TEXT NOT NULL,
+    metric_key  TEXT NOT NULL,
+    status      TEXT NOT NULL,
+    started_at  TEXT NOT NULL,
+    finished_at TEXT,
+    error       TEXT,
+    PRIMARY KEY (run_id, metric_key)
+);
+
+CREATE INDEX IF NOT EXISTS idx_run_ledger_run ON run_ledger(run_id);
 """
 
 
@@ -149,6 +161,52 @@ class AlertStateStore:
             (fingerprint_key, bucket, score, severity, decision, reason, created_at.isoformat()),
         )
         self._conn.commit()
+
+    # -- run ledger --------------------------------------------------------
+    #
+    # The alert-state tables above answer "what did we already tell the user".
+    # The ledger answers a different question: "how far did the last execution
+    # get". Without it an interrupted run either silently drops the metrics it
+    # never reached, or redoes everything from the top, which for a wide plan
+    # means minutes of duplicated queries. One row per (run, metric) is enough
+    # to resume precisely, and it stays readable when inspected by hand.
+
+    def run_begin(self, run_id: str, metric_key: str, now: datetime) -> None:
+        """Record that ``metric_key`` has started under ``run_id``."""
+        self._conn.execute(
+            "INSERT INTO run_ledger (run_id, metric_key, status, started_at, finished_at, error) "
+            "VALUES (?, ?, 'running', ?, NULL, NULL) "
+            "ON CONFLICT(run_id, metric_key) DO UPDATE SET "
+            "status='running', started_at=excluded.started_at, finished_at=NULL, error=NULL",
+            (run_id, metric_key, now.isoformat()),
+        )
+        self._conn.commit()
+
+    def run_finish(
+        self,
+        run_id: str,
+        metric_key: str,
+        now: datetime,
+        error: str | None = None,
+    ) -> None:
+        """Mark a metric finished; ``error`` turns it into a retryable failure."""
+        self._conn.execute(
+            "UPDATE run_ledger SET status=?, finished_at=?, error=? WHERE run_id=? AND metric_key=?",
+            ("failed" if error else "done", now.isoformat(), error, run_id, metric_key),
+        )
+        self._conn.commit()
+
+    def run_states(self, run_id: str) -> dict[str, str]:
+        """Return ``{metric_key: status}`` for one run."""
+        rows = self._conn.execute(
+            "SELECT metric_key, status FROM run_ledger WHERE run_id=? ORDER BY metric_key",
+            (run_id,),
+        ).fetchall()
+        return {row["metric_key"]: row["status"] for row in rows}
+
+    def run_done(self, run_id: str) -> set[str]:
+        """Metrics that completed successfully and can be skipped on resume."""
+        return {key for key, status in self.run_states(run_id).items() if status == "done"}
 
     # -- helpers -----------------------------------------------------------
     @staticmethod

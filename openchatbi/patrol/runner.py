@@ -179,40 +179,87 @@ class PatrolRunner:
         if not self.database:
             raise PatrolError("no database configured: set `database` in the plan or pass it to the runner")
 
-    def run(self, now: datetime | None = None, dry_run: bool = False) -> PatrolResult:
-        """Evaluate every metric in the plan.
+    def run(
+        self,
+        now: datetime | None = None,
+        dry_run: bool = False,
+        run_id: str | None = None,
+        resume: bool = False,
+        limit: int | None = None,
+    ) -> PatrolResult:
+        """Evaluate the plan, recording per-metric progress so it can resume.
 
         Args:
             now: Timestamp of the run. Injected for deterministic tests.
-            dry_run: When True, nothing is pushed and no state is persisted. Use it
-                to preview what a run would do.
+            dry_run: When True, nothing is pushed and no state is persisted.
+                Resumption is unavailable in dry-run mode by design: there is no
+                ledger to resume from.
+            run_id: Identifier of this execution. Resuming needs a stable value,
+                so callers should pass one (the CLI derives it from the plan
+                name and the run date).
+            resume: Skip metrics already recorded as ``done`` under ``run_id``.
+                Metrics left ``running`` by a killed process are re-evaluated,
+                which is what makes an interrupted run safe to restart.
+            limit: Evaluate at most this many remaining metrics. Partial runs are
+                how a wide plan stays inside a scheduler window, and they are
+                also the easiest way to demonstrate resumption.
         """
         run_at = now or datetime.now()
-        result = PatrolResult(run_at=run_at)
+        run_id = run_id or f"patrol:{run_at.date().isoformat()}"
+        result = PatrolResult(run_at=run_at, run_id=run_id)
         seen_fingerprints: set[str] = set()
+        track = not dry_run
 
         path = Path(self.database)
         if not path.exists():
             raise PatrolError(f"database not found: {path}")
 
+        done: set[str] = self.store.run_done(run_id) if (resume and track) else set()
+        pending: list[MetricSpec] = []
+        for metric in self.plan.metrics:
+            if metric.name in done:
+                result.skipped_metrics += 1
+                continue
+            pending.append(metric)
+        if limit is not None and limit >= 0:
+            pending = pending[:limit]
+
         connection = sqlite3.connect(str(path))
         try:
-            for metric in self.plan.metrics:
+            for metric in pending:
+                if track:
+                    self.store.run_begin(run_id, metric.name, run_at)
                 try:
                     grouped = _fetch_series(connection, metric)
+                    for dimension_value, series in grouped.items():
+                        result.series_evaluated += 1
+                        for alert in _build_alerts(metric, series, dimension_value, run_at.date()):
+                            seen_fingerprints.add(alert.fingerprint.key)
+                            self._handle_alert(alert, run_at, dry_run, result)
                 except PatrolError as exc:
                     result.errors.append(str(exc))
+                    result.failed_metrics += 1
+                    if track:
+                        self.store.run_finish(run_id, metric.name, run_at, str(exc))
                     continue
-
-                for dimension_value, series in grouped.items():
-                    result.series_evaluated += 1
-                    for alert in _build_alerts(metric, series, dimension_value, run_at.date()):
-                        seen_fingerprints.add(alert.fingerprint.key)
-                        self._handle_alert(alert, run_at, dry_run, result)
+                except Exception as exc:  # noqa: BLE001 - one bad metric must not sink the run
+                    message = f"{metric.name}: {type(exc).__name__}: {exc}"
+                    result.errors.append(message)
+                    result.failed_metrics += 1
+                    if track:
+                        self.store.run_finish(run_id, metric.name, run_at, message)
+                    continue
+                if track:
+                    self.store.run_finish(run_id, metric.name, run_at)
         finally:
             connection.close()
 
-        self._resolve_stale(seen_fingerprints, run_at, dry_run, result)
+        # Stale resolution asserts that an alert no longer fires. That claim only
+        # holds after every metric in the plan was evaluated during this pass: in a
+        # limited or resumed run the skipped metrics were never looked at, so
+        # resolving their alerts would silently close incidents that are still open.
+        if result.skipped_metrics == 0 and limit is None:
+            self._resolve_stale(seen_fingerprints, run_at, dry_run, result)
         return result
 
     def _handle_alert(self, alert: Alert, now: datetime, dry_run: bool, result: PatrolResult) -> None:

@@ -28,6 +28,7 @@ codes let a scheduler tell "broken" apart from "degraded".
 from __future__ import annotations
 
 import argparse
+from pathlib import Path
 import sys
 from datetime import datetime
 
@@ -56,6 +57,10 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--jsonl", default="patrol_alerts.jsonl", help="path for --notify jsonl")
     parser.add_argument("--webhook", default=None, help="URL for --notify webhook")
     parser.add_argument("--history", type=int, default=0, help="print the N most recent decisions and exit")
+    parser.add_argument("--run-id", default=None, help="identifier of this run (default: <plan>:<date>)")
+    parser.add_argument("--resume", action="store_true", help="skip metrics already done under --run-id")
+    parser.add_argument("--limit", type=int, default=None, help="evaluate at most N remaining metrics")
+    parser.add_argument("--ledger", action="store_true", help="print the run ledger for --run-id and exit")
     return parser
 
 
@@ -109,7 +114,23 @@ def main(argv: list[str] | None = None) -> int:
             return 1
 
         try:
-            result = runner.run(now=now, dry_run=args.dry_run)
+            effective_now = now or datetime.now()
+            run_id = args.run_id or f"{Path(args.plan).stem}:{effective_now.date().isoformat()}"
+            if args.ledger:
+                states = store.run_states(run_id)
+                if not states:
+                    print(f"no ledger entries for run {run_id}")
+                else:
+                    for key, status in states.items():
+                        print(f"{key:<24}{status}")
+                return 0
+            result = runner.run(
+                now=now,
+                dry_run=args.dry_run,
+                run_id=run_id,
+                resume=args.resume,
+                limit=args.limit,
+            )
         except PatrolError as exc:
             print(f"run failed: {exc}", file=sys.stderr)
             return 1
