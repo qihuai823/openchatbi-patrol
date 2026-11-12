@@ -219,3 +219,26 @@ python -m openchatbi.patrol --plan example_ecommerce/patrol_plan.yaml \
 ```
 
 一个刻意的约束：**告警结案（resolve）只在整个计划完整跑完时才执行**。部分运行里被跳过的指标根本没有被评估，把它们名下的告警结案，等于把仍然存在的问题静默关掉。
+
+### 演示：真的把进程杀掉再续上
+
+`example_ecommerce/patrol_plan_full.yaml` 是一份 85 个指标的计划（覆盖全部分类、渠道、州、订单状态），专门用来演示中断——指标少的时候整轮只有两三秒，`Ctrl+C` 掐不准。
+
+```bash
+# 起一轮，几秒后直接 kill 掉（这就是"任务被中断"）
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --notify none &
+sleep 1.5 && kill -9 %1
+
+# 看它停在哪：已完成的是 done，被杀时正在跑的那个是 running
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --ledger
+
+# 接着跑：跳过 done，重跑 running 和 failed
+python -m openchatbi.patrol --plan example_ecommerce/patrol_plan_full.yaml \
+    --state /tmp/patrol.sqlite --run-id nightly --resume
+```
+
+实测一次：1.5 秒后强杀，留下 33 个 `done`；`--resume` 只处理剩余 52 条序列，最终 85 个指标全部 `done`、0 失败、无残留 `running`。
+
+顺带一个启动开销的修正：`openchatbi/__init__.py` 原来在 import 时就把配置和 LLM 栈全部加载（约 9 秒），而巡检本来就声明「不需要 LLM」。改成惰性加载后 `import openchatbi` 从 8.96s 降到 0.84s，85 个指标的一轮巡检从 9.3s 降到 2.6s。

@@ -1,0 +1,1161 @@
+version: 1
+database: example_ecommerce/ecommerce.sqlite
+
+# 演示用完整计划：覆盖全部分类 / 渠道 / 州 / 订单状态，约 85 个指标。
+# 跑一轮的时间足够长，方便人为 Ctrl+C 中断后再用 --resume 接着跑。
+# 与 patrol_plan.yaml 的差别只有规模：口径、阈值、去重规则完全一致。
+
+defaults:
+  history_points: 35
+  min_samples: 14
+  min_relative_change: 0.08
+  cooldown_hours: 24
+  min_severity: medium
+  escalate: true
+  weekday_aware: true
+
+metrics:
+  - name: gmv
+    label: 成交总额 GMV
+    direction: both
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      WHERE o.order_status != 'Canceled'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: order_count
+    label: 有效订单量
+    direction: drop
+    min_relative_change: 0.12
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_beauty
+    label: GMV · beauty
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'beauty'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_book
+    label: GMV · book
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'book'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_clothes
+    label: GMV · clothes
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'clothes'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_electronics
+    label: GMV · electronics
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'electronics'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_food
+    label: GMV · food
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'food'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_garden
+    label: GMV · garden
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'garden'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_health
+    label: GMV · health
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'health'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_kitchen
+    label: GMV · kitchen
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'kitchen'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_music
+    label: GMV · music
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'music'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_office
+    label: GMV · office
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'office'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_outdoor
+    label: GMV · outdoor
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'outdoor'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_pet
+    label: GMV · pet
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'pet'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_phone
+    label: GMV · phone
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'phone'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_sports
+    label: GMV · sports
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'sports'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_cat_toy
+    label: GMV · toy
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Products p ON p.product_id = oi.product_id
+      WHERE o.order_status != 'Canceled'
+        AND p.category = 'toy'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_bulk
+    label: 有效订单量 · bulk
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'bulk'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_express
+    label: 有效订单量 · express
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'express'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_gift
+    label: 有效订单量 · gift
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'gift'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_online
+    label: 有效订单量 · online
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'online'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_priority
+    label: 有效订单量 · priority
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'priority'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_promotion
+    label: 有效订单量 · promotion
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'promotion'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_repeat
+    label: 有效订单量 · repeat
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'repeat'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_retail
+    label: 有效订单量 · retail
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'retail'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_seasonal
+    label: 有效订单量 · seasonal
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'seasonal'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_standard
+    label: 有效订单量 · standard
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'standard'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_verified
+    label: 有效订单量 · verified
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'verified'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_channel_wholesale
+    label: 有效订单量 · wholesale
+    direction: drop
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status != 'Canceled'
+        AND order_channel = 'wholesale'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_01
+    label: GMV · NE
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NE'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_02
+    label: GMV · WY
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'WY'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_03
+    label: GMV · LA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'LA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_04
+    label: GMV · KY
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'KY'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_05
+    label: GMV · MD
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MD'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_06
+    label: GMV · ND
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'ND'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_07
+    label: GMV · CO
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'CO'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_08
+    label: GMV · AZ
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'AZ'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_09
+    label: GMV · MI
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MI'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_10
+    label: GMV · ME
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'ME'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_11
+    label: GMV · WI
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'WI'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_12
+    label: GMV · IN
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'IN'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_13
+    label: GMV · PA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'PA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_14
+    label: GMV · UT
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'UT'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_15
+    label: GMV · CT
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'CT'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_16
+    label: GMV · WV
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'WV'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_17
+    label: GMV · VT
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'VT'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_18
+    label: GMV · MO
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MO'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_19
+    label: GMV · HI
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'HI'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_20
+    label: GMV · AK
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'AK'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_21
+    label: GMV · DE
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'DE'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_22
+    label: GMV · VA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'VA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_23
+    label: GMV · MN
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MN'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_24
+    label: GMV · AR
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'AR'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_25
+    label: GMV · TX
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'TX'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_26
+    label: GMV · IL
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'IL'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_27
+    label: GMV · NH
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NH'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_28
+    label: GMV · ID
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'ID'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_29
+    label: GMV · AL
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'AL'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_30
+    label: GMV · RI
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'RI'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_31
+    label: GMV · MS
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MS'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_32
+    label: GMV · GA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'GA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_33
+    label: GMV · NV
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NV'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_34
+    label: GMV · TN
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'TN'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_35
+    label: GMV · IA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'IA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_36
+    label: GMV · OR
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'OR'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_37
+    label: GMV · MT
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MT'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_38
+    label: GMV · SC
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'SC'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_39
+    label: GMV · OK
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'OK'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_40
+    label: GMV · KS
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'KS'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_41
+    label: GMV · NC
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NC'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_42
+    label: GMV · FL
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'FL'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_43
+    label: GMV · CA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'CA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_44
+    label: GMV · SD
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'SD'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_45
+    label: GMV · NY
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NY'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_46
+    label: GMV · MA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'MA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_47
+    label: GMV · WA
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'WA'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_48
+    label: GMV · NM
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NM'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_49
+    label: GMV · OH
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'OH'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: gmv_state_50
+    label: GMV · NJ
+    direction: drop
+    sql: |
+      SELECT date(o.date_order_placed) AS bucket,
+             SUM(oi.line_amount) AS value
+      FROM Orders o
+      JOIN Order_Items oi ON oi.order_id = o.order_id
+      JOIN Customers c ON c.customer_id = o.customer_id
+      WHERE o.order_status != 'Canceled'
+        AND c.state = 'NJ'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_status_canceled
+    label: 订单量 · Canceled
+    direction: both
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status = 'Canceled'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_status_delivered
+    label: 订单量 · Delivered
+    direction: both
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status = 'Delivered'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_status_pending
+    label: 订单量 · Pending
+    direction: both
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status = 'Pending'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_status_processed
+    label: 订单量 · Processed
+    direction: both
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status = 'Processed'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_status_returned
+    label: 订单量 · Returned
+    direction: both
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status = 'Returned'
+      GROUP BY 1
+      ORDER BY 1
+
+  - name: orders_status_shipped
+    label: 订单量 · Shipped
+    direction: both
+    sql: |
+      SELECT date(date_order_placed) AS bucket,
+             COUNT(*) AS value
+      FROM Orders
+      WHERE order_status = 'Shipped'
+      GROUP BY 1
+      ORDER BY 1
+
